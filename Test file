@@ -1,0 +1,94 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const request = require('request');
+
+const app = express();
+app.use(bodyParser.json());
+
+const VERIFY_TOKEN = "YOUR_VERIFY_TOKEN"; // 
+const PAGE_ACCESS_TOKEN = "YOUR_PAGE_ACCESS_TOKEN"; // 
+
+// Xác minh webhook với Facebook
+app.get('/webhook', (req, res) => {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+        console.log('Webhook đã được xác minh!');
+        res.status(200).send(challenge);
+    } else {
+        res.sendStatus(403);
+    }
+});
+
+// Xử lý tin nhắn từ Facebook
+app.post('/webhook', (req, res) => {
+    const body = req.body;
+
+    if (body.object === 'page') {
+        body.entry.forEach(entry => {
+            const webhook_event = entry.messaging[0];
+            console.log('Sự kiện nhận được:', webhook_event);
+
+            const sender_psid = webhook_event.sender.id;
+
+            // Nếu là tin nhắn, xử lý nó
+            if (webhook_event.message) {
+                handleMessage(sender_psid, webhook_event.message);
+            }
+        });
+
+        res.status(200).send('EVENT_RECEIVED');
+    } else {
+        res.sendStatus(404);
+    }
+});
+
+// Hàm xử lý tin nhắn
+function handleMessage(sender_psid, received_message) {
+    let response;
+
+    if (received_message.text) {
+        const message = received_message.text.toLowerCase();
+
+        // Tạo phản hồi dựa trên nội dung tin nhắn
+        if (message.includes('chào')) {
+            response = { text: "Chào em nha! Anh rất yêu em!Em yêu anh không?" };
+        } else if (message.includes('Sos ')) {
+            response = { text: "Mày hỏi bố mày cái gì ? Nói" };
+        } else {
+            response = { text: `Bạn vừa nói: "${received_message.text}".Nói tiếng người hộ tao cái` };
+        }
+    } else {
+        response = { text: "Đéo hiểu lắm nào thông minh thì thử lại" };
+    }
+
+    callSendAPI(sender_psid, response);
+}
+
+// Hàm gửi tin nhắn lại cho người dùng
+function callSendAPI(sender_psid, response) {
+    const request_body = {
+        recipient: { id: sender_psid },
+        message: response
+    };
+
+    request({
+        uri: 'https://graph.facebook.com/v16.0/me/messages',
+        qs: { access_token: PAGE_ACCESS_TOKEN },
+        method: 'POST',
+        json: request_body
+    }, (err, res, body) => {
+        if (!err) {
+            console.log('Gửi tin nhắn thành công!');
+        } else {
+            console.error('Không gửi được tin nhắn:', err);
+        }
+    });
+}
+
+// Khởi động server
+app.listen(3000, () => {
+    console.log('Dậy');
+});
